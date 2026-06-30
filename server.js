@@ -107,10 +107,11 @@ app.post('/api/download', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('API Error:', error.message);
+    const apiErrorBody = error.response?.data;
+    console.error('API Error:', error.message, apiErrorBody);
     res.status(500).json({
       error: 'Download failed! Please try again.',
-      details: error.message
+      details: apiErrorBody ? JSON.stringify(apiErrorBody) : error.message
     });
   }
 });

@@ -3,6 +3,33 @@ const axios = require('axios');
 const cors = require('cors');
 require('dotenv').config();
 
+// Normalize any YouTube URL (Shorts, youtu.be, share links with extra params) to standard watch?v= format
+function normalizeYoutubeUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    let videoId = u.searchParams.get('v');
+
+    if (!videoId && u.hostname.includes('youtu.be')) {
+      videoId = u.pathname.split('/').filter(Boolean)[0];
+    }
+
+    if (!videoId && u.pathname.includes('/shorts/')) {
+      videoId = u.pathname.split('/shorts/')[1]?.split('/')[0];
+    }
+
+    if (!videoId && u.pathname.includes('/embed/')) {
+      videoId = u.pathname.split('/embed/')[1]?.split('/')[0];
+    }
+
+    if (videoId) {
+      return `https://www.youtube.com/watch?v=${videoId}`;
+    }
+  } catch (e) {
+    // fall through
+  }
+  return rawUrl;
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -37,6 +64,7 @@ app.post('/api/download', async (req, res) => {
 
     // This API uses resolution-based format codes for video, 'mp3' for audio
     const apiFormat = format === 'mp3' ? 'mp3' : '720';
+    const normalizedUrl = normalizeYoutubeUrl(url);
 
     const submitOptions = {
       method: 'GET',
@@ -44,7 +72,7 @@ app.post('/api/download', async (req, res) => {
       params: {
         format: apiFormat,
         add_info: '1',
-        url: url,
+        url: normalizedUrl,
         audio_quality: '128',
         allow_extended_duration: 'false',
         no_merge: 'false',
@@ -131,7 +159,7 @@ app.get('/api/info', async (req, res) => {
       params: {
         format: 'mp4',
         add_info: '1',
-        url: url
+        url: normalizeYoutubeUrl(url)
       },
       headers: {
         'x-rapidapi-key': RAPIDAPI_KEY,

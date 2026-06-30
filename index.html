@@ -867,7 +867,7 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || 'Download failed!');
+                    throw new Error((data.error || 'Download failed!') + (data.details ? ' — ' + data.details : ''));
                 }
 
                 // Show result

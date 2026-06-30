@@ -66,33 +66,27 @@ app.post('/api/download', async (req, res) => {
       });
     }
 
-    // Poll progress until ready (max ~30 sec)
+    const progressUrl = job.progress_url || `https://p.savenow.to/api/progress?id=${job.id}`;
+
+    // Poll progress until ready (max ~8 sec to fit serverless timeout)
     let downloadLink = null;
     let title = job.info?.title || job.title || 'Video';
 
-    for (let attempt = 0; attempt < 4; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       await new Promise(r => setTimeout(r, 1500));
 
-      const progressResponse = await axios.request({
-        method: 'GET',
-        url: 'https://youtube-info-download-api.p.rapidapi.com/ajax/progress.php',
-        params: { id: job.id },
-        headers: {
-          'x-rapidapi-key': RAPIDAPI_KEY,
-          'x-rapidapi-host': RAPIDAPI_HOST
-        }
-      });
-
+      const progressResponse = await axios.get(progressUrl);
       const progress = progressResponse.data;
+
+      if (progress.title) title = progress.title;
+      if (progress.info?.title) title = progress.info.title;
 
       if (progress.download_url) {
         downloadLink = progress.download_url;
-        if (progress.title) title = progress.title;
         break;
       }
-
-      if (progress.progress >= 1000 && progress.download_url) {
-        downloadLink = progress.download_url;
+      if (progress.url) {
+        downloadLink = progress.url;
         break;
       }
     }

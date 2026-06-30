@@ -13,8 +13,8 @@ app.use(cors({
 app.use(express.json());
 
 // RapidAPI Configuration
-const RAPIDAPI_KEY = '8138e0fbb7msh5fdbcdbfd734137p176442jsnc7f65d3ac3f8';
-const RAPIDAPI_HOST = 'youtube-mp36.p.rapidapi.com';
+const RAPIDAPI_KEY = '46e76ec678msh7a3fb167a9479b4p119690jsnee3ff0b4d897';
+const RAPIDAPI_HOST = 'youtube-info-download-api.p.rapidapi.com';
 
 // Health Check
 app.get('/api/health', (req, res) => {
@@ -37,9 +37,15 @@ app.post('/api/download', async (req, res) => {
 
     const options = {
       method: 'GET',
-      url: 'https://youtube-mp36.p.rapidapi.com/dl',
+      url: 'https://youtube-info-download-api.p.rapidapi.com/ajax/download.php',
       params: {
-        id: extractVideoId(url)
+        format: format === 'mp3' ? 'mp3' : 'mp4',
+        add_info: '0',
+        url: url,
+        audio_quality: '128',
+        allow_extended_duration: 'false',
+        no_merge: 'false',
+        audio_language: 'en'
       },
       headers: {
         'x-rapidapi-key': RAPIDAPI_KEY,
@@ -48,19 +54,20 @@ app.post('/api/download', async (req, res) => {
     };
 
     const response = await axios.request(options);
+    const result = response.data;
 
-    // Handle different format requests
-    let downloadLink = response.data.link;
-    
-    if (format === 'mp3' && response.data.mp3) {
-      downloadLink = response.data.mp3;
-    } else if (format === 'mp4' && response.data.mp4) {
-      downloadLink = response.data.mp4;
+    if (!result || (!result.download_url && !result.url && !result.link)) {
+      return res.status(500).json({
+        error: 'Download failed! Please try again.',
+        details: 'No download link returned by API'
+      });
     }
+
+    const downloadLink = result.download_url || result.url || result.link;
 
     res.json({
       success: true,
-      title: response.data.title || 'Video',
+      title: result.title || result.info?.title || 'Video',
       downloadLink: downloadLink,
       format: format,
       message: 'Download link generated successfully!'
@@ -86,9 +93,11 @@ app.get('/api/info', async (req, res) => {
 
     const options = {
       method: 'GET',
-      url: 'https://youtube-mp36.p.rapidapi.com/info',
+      url: 'https://youtube-info-download-api.p.rapidapi.com/ajax/download.php',
       params: {
-        id: extractVideoId(url)
+        format: 'mp4',
+        add_info: '1',
+        url: url
       },
       headers: {
         'x-rapidapi-key': RAPIDAPI_KEY,
@@ -97,12 +106,13 @@ app.get('/api/info', async (req, res) => {
     };
 
     const response = await axios.request(options);
+    const result = response.data;
 
     res.json({
       success: true,
-      title: response.data.title,
-      duration: response.data.duration,
-      thumbnail: response.data.thumbnail
+      title: result.title || result.info?.title || 'Unknown',
+      duration: result.duration || result.info?.duration || 'Unknown',
+      thumbnail: result.thumbnail || result.info?.thumbnail || ''
     });
 
   } catch (error) {

@@ -35,12 +35,15 @@ app.post('/api/download', async (req, res) => {
       return res.status(400).json({ error: 'Only YouTube URLs supported!' });
     }
 
-    const options = {
+    // This API uses resolution-based format codes for video, 'mp3' for audio
+    const apiFormat = format === 'mp3' ? 'mp3' : '720';
+
+    const submitOptions = {
       method: 'GET',
       url: 'https://youtube-info-download-api.p.rapidapi.com/ajax/download.php',
       params: {
-        format: format === 'mp3' ? 'mp3' : 'mp4',
-        add_info: '0',
+        format: apiFormat,
+        add_info: '1',
         url: url,
         audio_quality: '128',
         allow_extended_duration: 'false',
@@ -53,21 +56,57 @@ app.post('/api/download', async (req, res) => {
       }
     };
 
-    const response = await axios.request(options);
-    const result = response.data;
+    const submitResponse = await axios.request(submitOptions);
+    const job = submitResponse.data;
 
-    if (!result || (!result.download_url && !result.url && !result.link)) {
+    if (!job || !job.success || !job.id) {
       return res.status(500).json({
         error: 'Download failed! Please try again.',
-        details: 'No download link returned by API'
+        details: 'Could not start download job: ' + JSON.stringify(job)
       });
     }
 
-    const downloadLink = result.download_url || result.url || result.link;
+    // Poll progress until ready (max ~30 sec)
+    let downloadLink = null;
+    let title = job.info?.title || job.title || 'Video';
+
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await new Promise(r => setTimeout(r, 1500));
+
+      const progressResponse = await axios.request({
+        method: 'GET',
+        url: 'https://youtube-info-download-api.p.rapidapi.com/ajax/progress.php',
+        params: { id: job.id },
+        headers: {
+          'x-rapidapi-key': RAPIDAPI_KEY,
+          'x-rapidapi-host': RAPIDAPI_HOST
+        }
+      });
+
+      const progress = progressResponse.data;
+
+      if (progress.download_url) {
+        downloadLink = progress.download_url;
+        if (progress.title) title = progress.title;
+        break;
+      }
+
+      if (progress.progress >= 1000 && progress.download_url) {
+        downloadLink = progress.download_url;
+        break;
+      }
+    }
+
+    if (!downloadLink) {
+      return res.status(500).json({
+        error: 'Download failed! Please try again.',
+        details: 'Job did not complete in time. Try again in a moment.'
+      });
+    }
 
     res.json({
       success: true,
-      title: result.title || result.info?.title || 'Video',
+      title: title,
       downloadLink: downloadLink,
       format: format,
       message: 'Download link generated successfully!'
